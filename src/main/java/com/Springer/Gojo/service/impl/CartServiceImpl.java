@@ -17,9 +17,11 @@ import com.Springer.Gojo.repository.UserRepository;
 import com.Springer.Gojo.service.CartService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CartServiceImpl implements CartService {
 
 	private final CartRepository cartRepository;
@@ -38,6 +40,13 @@ public class CartServiceImpl implements CartService {
 		cart.addItem(product, quantity);
 
 		Cart savedCart = cartRepository.save(cart);
+		
+		log.atInfo()
+			.setMessage("Item added to cart")
+			.addKeyValue("productId", productId)
+			.addKeyValue("quantity", quantity)
+			.addKeyValue("cartTotal", savedCart.getTotalPrice())
+			.log();
 
 		return cartMapper.toResponse(savedCart);
 	}
@@ -48,10 +57,23 @@ public class CartServiceImpl implements CartService {
 		User user = getCurrentUser();
 		Cart cart = getCartOrThrow(user);
 		Product product = productRepository.findById(productId)
-				.orElseThrow(() -> new ResourceNotFoundException("Product not found."));
+				.orElseThrow(() -> {
+			        log.atWarn()
+			           .setMessage("Remove failed: Product not found")
+			           .addKeyValue("productId", productId)
+			           .log();
+			        return new ResourceNotFoundException("Product not found.");
+			    });
 
 		cart.removeItem(product);
-		return cartMapper.toResponse(cartRepository.save(cart));
+		
+		Cart savedNewCart = cartRepository.save(cart);
+		
+		log.atInfo()
+			.setMessage("Item removed from cart")
+			.addKeyValue("productId", productId)
+			.log();
+		return cartMapper.toResponse(savedNewCart);
 	}
 
 	@Override
@@ -61,10 +83,25 @@ public class CartServiceImpl implements CartService {
 		Cart cart = getCartOrThrow(user);
 
 		CartItem cartItem = cart.getItems().stream().filter(i -> i.getProduct().getId().equals(productId)).findFirst()
-				.orElseThrow(() -> new ResourceNotFoundException("Item not found"));
+				.orElseThrow(() -> {
+					log.atWarn()
+						.setMessage("Attempted to update non-existent cart item")
+						.addKeyValue("productId", productId)
+						.log();
+					return new ResourceNotFoundException("Item not found");	
+				});
 
 		cartItem.updateQuantity(quantity);
-		return cartMapper.toResponse(cartRepository.save(cart));
+		
+		Cart updatedCart = cartRepository.save(cart);
+				
+		log.atInfo()
+			.setMessage("Item quantity updated in cart")
+			.addKeyValue("productId", productId)
+			.addKeyValue("quantity", quantity)
+			.log();
+		
+		return cartMapper.toResponse(updatedCart);
 	}
 
 	@Override
@@ -83,21 +120,42 @@ public class CartServiceImpl implements CartService {
 		Cart cart = getCartOrThrow(user);
 		cart.clear();
 		cartRepository.save(cart);
+		log.atInfo()
+			.setMessage("Cart clear successfully")
+			.log();	
 	}
 
 	private User getCurrentUser() {
 		String email = SecurityContextHolder.getContext().getAuthentication().getName();
-		return userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User not found."));
+		return userRepository.findByEmail(email).orElseThrow(() ->{
+			log.atError().setMessage("Security Context Error: Authenticated user not found in DB").log();
+			return new ResourceNotFoundException("User not found.");
+		});
 	}
 
 	private Cart getCartOrThrow(User user) {
-		return cartRepository.findByUser(user).orElseThrow(() -> new ResourceNotFoundException("Cart not found."));
+		return cartRepository.findByUser(user).orElseThrow(() -> {
+			// Logged as WARN because a user without a cart shouldn't be hitting 'update' or 'clear'
+            log.atWarn()
+               .setMessage("Cart lookup failed")
+               .addKeyValue("user", user.getEmail())
+               .log();
+            return new ResourceNotFoundException("Cart not found.");
+		});
 	}
 
 	private Cart createCart(User user) {
 		Cart cart = Cart.builder().user(user)
 //					   .items(new ArrayList<>())// @Builder.Default handle this
 				.build();
-		return cartRepository.save(cart);
+		Cart savedcart = cartRepository.save(cart);
+		
+		// Logged as DEBUG: Vital for tracking new user conversion/onboarding
+        log.atDebug()
+           .setMessage("New cart initialized for user")
+           .addKeyValue("user", user.getEmail())
+           .log();
+		
+		return savedcart;
 	}
 }

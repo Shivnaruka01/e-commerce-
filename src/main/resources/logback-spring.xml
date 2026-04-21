@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE logback-spring.xml>
+<configuration>
+
+    <!-- 1. Define where to save the log files -->
+    <property name="LOG_DIR" value="./logs" />
+    <property name="LOG_FILE_NAME" value="gojo-app" />
+
+    <!-- 2. Console Appender: Beautiful logs for your IDE terminal -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %d{yyyy-MM-dd HH:mm:ss} %highlight(%-5level) [%thread] %cyan(%logger{20}) - [User: %X{userEmail:-System}] - %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- 3. Rolling File Appender: Saves logs and "rotates" them daily -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${LOG_FILE_NAME}.log</file>
+        
+        <!-- Strategy: Create a new file every day or when it reaches 10MB -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/archived/${LOG_FILE_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory> <!-- Keep 30 days of history -->
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{36} - [User: %X{userEmail:-System}] - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 4. Set Log Levels -->
+    <!-- Root level for external libraries (Spring, Hibernate) -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
+    </root>
+
+    <!-- DEBUG level for YOUR code to see the AOP logs and SQL (if needed) -->
+    <logger name="com.Springer.Gojo" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
+    </logger>
+
+</configuration>

@@ -17,9 +17,11 @@ import com.Springer.Gojo.security.JWTService;
 import com.Springer.Gojo.service.UserService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserServiceImpl implements UserService {
 
 	private final UserRepository userRepository;
@@ -32,8 +34,12 @@ public class UserServiceImpl implements UserService {
 
 	@Override
 	public UserResponse register(UserRegisterRequest request) {
-
+        // Warning if email exists (detects bot spam)
 		userRepository.findByEmail(request.email()).ifPresent(user -> {
+			log.atWarn()
+				.setMessage("Resgistration blocked: Email exists")
+				.addKeyValue("email", request.email())
+				.log();			
 			throw new EmailAlreadyExistsException("Email already exist");
 		});
 
@@ -44,9 +50,15 @@ public class UserServiceImpl implements UserService {
 		User user = userMapper.toEntity(request, passwordEncoder.encode(request.password()));
 
 		// Save to DB
-//		User savedUser = userRepository.save(user);
+		User savedUser = userRepository.save(user);
+		
+		log.atInfo()
+			.setMessage("User register successfully")
+			.addKeyValue("userId", savedUser.getId())
+			.addKeyValue("role", savedUser.getRole())
+			.log();
 
-		return userMapper.toResponse(userRepository.save(user));
+		return userMapper.toResponse(savedUser);
 	}
 
 	// MapStruct handling it.
@@ -70,15 +82,31 @@ public class UserServiceImpl implements UserService {
 
 	@Override
 	public UserLoginResponse login(UserLoginRequest request) {
-
+		log.atInfo()
+        .setMessage("Login attempt initiated")
+        .addKeyValue("email", request.email())
+        .log();
+		
 		return userRepository.findByEmail(request.email())
 
 				// Check if password matches
-				.filter(user -> passwordEncoder.matches(request.password(), user.getPassword()))
-
+				.filter(user -> {
+					boolean matches = passwordEncoder.matches(request.password(), user.getPassword());
+					if(!matches) {
+						log.atWarn()
+							.setMessage("Login failed: Invalid credentials")
+							.addKeyValue("email", request.email())
+							.log();
+					}
+					return matches;
+				})
 				// Convert the valid user to response dto
 				.map(user -> {
 					String token = jwtService.generateToken(user);
+					log.atInfo()
+                    .setMessage("Login successful")
+                    .addKeyValue("email", user.getEmail())
+                    .log();
 					return new UserLoginResponse(user.getId(), user.getEmail(), user.getRole(), token);
 				})
 
