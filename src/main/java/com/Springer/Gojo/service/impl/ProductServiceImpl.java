@@ -13,9 +13,11 @@ import com.Springer.Gojo.repository.ProductRepository;
 import com.Springer.Gojo.service.ProductService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProductServiceImpl implements ProductService {
 
 	private final ProductRepository productRepository;
@@ -25,7 +27,14 @@ public class ProductServiceImpl implements ProductService {
 	@Override
 	public ProductResponse createProduct(ProductRequest request) {
 		Product product = mapper.toEntity(request);
-		return mapper.toResponse(productRepository.save(product));
+		Product savedProduct = productRepository.save(product);
+		log.atInfo()
+			.setMessage("New product cataloged")
+			.addKeyValue("productId", savedProduct.getId())
+			.addKeyValue("name", savedProduct.getName())
+			.addKeyValue("initialPrice", savedProduct.getPrice())
+			.log();
+			return mapper.toResponse(savedProduct);
 	}
 
 	@Override
@@ -60,6 +69,15 @@ public class ProductServiceImpl implements ProductService {
 //						.orElseThrow(() -> new ResourceNotFoundException("Product not found with id: " + id));
 
 		return productRepository.findById(id).map(existingProduct -> {
+
+			// Logic: Log old values before updating for an Audit Trail
+			log.atInfo()
+				.setMessage("Updating product details")
+				.addKeyValue("productId", id)
+				.addKeyValue("oldPrice", existingProduct.getPrice())
+	            .addKeyValue("newPrice", request.price())
+	            .log();
+			
 			// Domain logic instead of Mapper logic
 			existingProduct.updateDetails(request.name(), request.description());
 			existingProduct.adjustPrice(request.price());
@@ -80,8 +98,14 @@ public class ProductServiceImpl implements ProductService {
 	@Override
 	public void deleteProduct(Long id) {
 
-		productRepository.findById(id).ifPresentOrElse(productRepository::delete, () -> {
-			throw new ResourceNotFoundException("Product not found with id: " + id);
+		productRepository.findById(id).ifPresentOrElse(p -> {
+			productRepository.delete(p);
+			log.atWarn()
+				.setMessage("Product removed from catalog")
+				.addKeyValue("productId", id)
+				.log();
+		}, () -> { throw new ResourceNotFoundException("Product not found");
+			
 		});
 
 	}

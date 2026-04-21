@@ -13,8 +13,10 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class JWTService {
 
 	@Value("${jwt.secret}")
@@ -24,13 +26,9 @@ public class JWTService {
 	private long expirationTime;
 
 	public String generateToken(User user) {
-		return Jwts.builder()
-				.setSubject(user.getEmail())
-				.claim("role", "ROLE_" + user.getRole().name())
-				.setIssuedAt(new Date())
-				.setExpiration(new Date(System.currentTimeMillis() + expirationTime))
-				.signWith(getSignKey(), SignatureAlgorithm.HS256)
-				.compact();
+		return Jwts.builder().setSubject(user.getEmail()).claim("role", "ROLE_" + user.getRole().name())
+				.setIssuedAt(new Date()).setExpiration(new Date(System.currentTimeMillis() + expirationTime))
+				.signWith(getSignKey(), SignatureAlgorithm.HS256).compact();
 	}
 
 	private Key getSignKey() {
@@ -40,8 +38,17 @@ public class JWTService {
 	public String extractRole(String token) {
 		return extractClaim(token, claim -> claim.get("role", String.class));
 	}
+
+	// ROOT method: Log errors here once
 	public Claims extractAllClaims(String token) {
-		return Jwts.parserBuilder().setSigningKey(getSignKey()).build().parseClaimsJws(token).getBody();
+		try {
+			return Jwts.parserBuilder().setSigningKey(getSignKey()).build().parseClaimsJws(token).getBody();
+		} catch (Exception e) {
+			// Logs the specific reason: "Signature mismatch", "Malformed JWT" etc.
+			log.atError().setMessage("JWT Parsing failed").addKeyValue("exception", e.getClass().getSimpleName())
+			.addKeyValue("reason", e.getMessage()).log();
+			throw e;
+		}
 	}
 
 	public <T> T extractClaim(String token, Function<Claims, T> resolver) {
@@ -58,8 +65,18 @@ public class JWTService {
 		return username.equals(user.getEmail()) && !isTokenExpired(token);
 	}
 
+	// Log user behavior (Security Audit)
 	public boolean isTokenExpired(String token) {
-		return extractClaim(token, Claims::getExpiration).before(new Date());
+		try {
+			boolean expired = extractClaim(token, Claims::getExpiration).before(new Date());
+			if (expired) {
+				log.atWarn().setMessage("Expired JWT token presented").log();
+			}
+			return expired;
+		} catch (Exception e) {
+			log.atDebug().setMessage("Could not check expiration - token likely malformed").log();
+			return true; // If we can't read it, treat it as expired/invalid
+		}
 	}
 }
 /*

@@ -27,9 +27,11 @@ import com.Springer.Gojo.service.OrderService;
 import com.Springer.Gojo.service.PaymentService;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderServiceImpl implements OrderService {
 
 	private final CartRepository cartRepository;
@@ -46,7 +48,10 @@ public class OrderServiceImpl implements OrderService {
 		User user = getCurrentUser();
 
 		// 2. Find user cart in the database
-		Cart cart = cartRepository.findByUser(user).orElseThrow(() -> new ResourceNotFoundException("Cart not found."));
+		Cart cart = cartRepository.findByUser(user).orElseThrow(() -> {
+			log.atError().setMessage("Cart missing during checkout").addKeyValue("user", user.getEmail()).log();
+			return new ResourceNotFoundException("Cart not found.");
+		});
 
 		// 3. Check if cart empty or not
 		if (cart.getItems().isEmpty())
@@ -78,7 +83,10 @@ public class OrderServiceImpl implements OrderService {
 
 		// Create Payment
 		PaymentResponse payment = paymentService.createPayment(savedOrder);
-		
+
+		log.atInfo().setMessage("Transaction completed successfully").addKeyValue("orderId", savedOrder.getId())
+		.addKeyValue("paymentId", payment.paymentId()).addKeyValue("total", savedOrder.getTotalAmount()).log();
+
 		// 8.Clear the cart because order is placed so there is nothing left in it
 		cart.clear();
 		cartRepository.save(cart);
@@ -149,6 +157,7 @@ public class OrderServiceImpl implements OrderService {
 	@Override
 	@Transactional
 	public OrderResponse cancelOrder(Long id) {
+		log.atInfo().setMessage("Cancellation request received").addKeyValue("orderId", id).log();
 		Order order = orderRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Order not found"));
 
 		// check if current user owns this or
@@ -168,6 +177,8 @@ public class OrderServiceImpl implements OrderService {
 			Product product = item.getProduct();
 			product.restock(item.getQuantity());
 		}
+		log.atInfo().setMessage("Order cancelled and restocked").addKeyValue("orderId", id)
+		.addKeyValue("cancelledBy", isAdmin ? "ADMIN" : "OWNER").log();
 		return orderMapper.toResponse(orderRepository.save(order));
 	}
 }
