@@ -32,10 +32,15 @@ public class SecurityConfig {
 
 		http.csrf(csrf -> csrf.disable())
 		.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-		.authorizeHttpRequests(auth -> auth.requestMatchers("/satoru/users/register", "/satoru/users/login")
+		.authorizeHttpRequests(auth -> auth
+				.requestMatchers(
+						"/v3/api-docs/**",
+				        "/swagger-ui/**",
+				        "/swagger-ui.html"
+						).permitAll()
+				.requestMatchers("/satoru/users/register", "/satoru/users/login")
 				.permitAll().requestMatchers("/Gojo/orders/admin/**").hasRole("ADMIN")
 				.requestMatchers("/Gojo/orders/**").hasAnyRole("USER", "ADMIN")
-
 				.anyRequest().authenticated())
 		.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 		return http.build();
