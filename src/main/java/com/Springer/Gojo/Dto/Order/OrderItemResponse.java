@@ -2,8 +2,12 @@ package com.Springer.Gojo.Dto.Order;
 
 import java.math.BigDecimal;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 public record OrderItemResponse(
 
-		Long productId, String productName, BigDecimal price, int quantity, BigDecimal subtotal) {
-
-}
+		@Schema(example = "1") Long productId, 
+		@Schema(example = "Gojo Satoru Figure")String productName, 
+		@Schema(example = "1200.00")BigDecimal price, 
+		@Schema(example = "2")int quantity, 
+		@Schema(example = "2400.00")BigDecimal subtotal) {}
